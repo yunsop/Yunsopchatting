@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>온라인 실시간 비밀 채팅 프로그램</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .container { width: 100%; max-width: 480px; height: 90vh; max-height: 680px; background: #ffffff; border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+        
+        .screen { padding: 30px 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center; overflow-y: auto; }
+        h2 { font-size: 22px; color: #1a1a1a; margin-bottom: 20px; }
+        
+        .input-group { width: 100%; margin-bottom: 14px; text-align: left; }
+        .input-group label { display: block; font-size: 13px; color: #666; margin-bottom: 5px; font-weight: 500; }
+        .input-group input { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+        .input-group input:focus { border-color: #4A90E2; }
+        
+        .notice-text { font-size: 12px; color: #e74c3c; margin-top: 4px; display: block; }
+
+        .btn { width: 100%; padding: 12px; background-color: #4A90E2; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+        .btn:hover { background-color: #357ABD; }
+        .btn-secondary { background-color: #6c757d; margin-top: 8px; }
+        .btn-secondary:hover { background-color: #5a6268; }
+
+        .error-msg { color: #e74c3c; font-size: 13px; margin-top: 10px; display: none; }
+
+        /* 서명 영역 스타일 및 줌 제어 */
+        .signature-box-container { width: 100%; position: relative; }
+        .sig-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .sig-tools { display: flex; gap: 4px; }
+        .sig-tool-btn { font-size: 11px; padding: 2px 8px; background: #e0e0e0; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+        .sig-tool-btn:hover { background: #d0d0d0; }
+
+        .signature-box { width: 100%; border: 1px dashed #bbb; border-radius: 8px; background: #fafafa; position: relative; touch-action: none; }
+        canvas { width: 100%; height: 130px; display: block; border-radius: 8px; cursor: crosshair; touch-action: none; }
+
+        /* 서명란 전체화면 (모달 스타일) */
+        .signature-box.fullscreen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: 9999; background: #ffffff; border: none; border-radius: 0;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px;
+        }
+        .signature-box.fullscreen canvas {
+            width: 95vw; height: 75vh; border: 2px dashed #4A90E2; border-radius: 12px;
+        }
+        .fullscreen-controls { display: none; margin-top: 15px; gap: 10px; }
+        .signature-box.fullscreen .fullscreen-controls { display: flex; }
+
+        /* 보안 캡처 방지 블라인드 가림막 */
+        #anti-capture-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #000000; z-index: 999999; justify-content: center; align-items: center;
+            color: #ffffff; font-size: 18px; font-weight: bold;
+        }
+
+        /* 최고관리자 항상 상단 노출 버튼 */
+        .top-admin-bar { position: absolute; top: 12px; right: 12px; z-index: 50; }
+        .admin-access-btn { background: rgba(0, 0, 0, 0.08); color: #444; border: 1px solid rgba(0, 0, 0, 0.15); padding: 5px 9px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; }
+        .admin-access-btn:hover { background: rgba(0, 0, 0, 0.15); }
+
+        /* 채팅 화면 */
+        #chat-screen { display: none; flex-direction: column; height: 100%; padding: 0; }
+        .chat-header { background-color: #4A90E2; color: white; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; }
+        .header-left { display: flex; flex-direction: column; gap: 2px; }
+        .chat-header h3 { font-size: 16px; }
+        .user-tag { font-size: 11px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 8px; align-self: flex-start; }
+        .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background-color: #f9fafb; }
+        .message-item { display: flex; flex-direction: column; max-width: 75%; position: relative; }
+        .message-item.sent { align-self: flex-end; align-items: flex-end; }
+        .message-item.received { align-self: flex-start; align-items: flex-start; }
+        .sender-name { font-size: 12px; color: #777; margin-bottom: 4px; }
+        .message-bubble { padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.4; word-break: break-word; }
+        .message-item.sent .message-bubble { background-color: #4A90E2; color: white; border-bottom-right-radius: 2px; }
+        .message-item.received .message-bubble { background-color: #e9ecef; color: #333; border-bottom-left-radius: 2px; }
+        .chat-image { max-width: 100%; border-radius: 8px; margin-top: 4px; }
+        .delete-msg-btn { font-size: 10px; color: #ff4d4f; background: none; border: none; cursor: pointer; margin-top: 2px; display: none; }
+        .admin-mode .delete-msg-btn { display: inline-block; }
+        .chat-input-area { padding: 12px; background: white; border-top: 1px solid #eee; display: flex; align-items: center; gap: 8px; }
+        .file-label { cursor: pointer; padding: 8px; color: #666; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+        .file-label:hover { background: #f0f0f0; }
+        #file-input { display: none; }
+        #message-input { flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 14px; }
+        #send-btn { background-color: #4A90E2; color: white; border: none; padding: 8px 16px; border-radius: 18px; cursor: pointer; font-weight: 600; }
+        #send-btn:hover { background-color: #357ABD; }
+
+        /* 모달 팝업 */
+        .modal-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: white; width: 90%; max-width: 420px; border-radius: 12px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); max-height: 85vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .modal-header h4 { font-size: 16px; color: #1a1a1a; }
+        .close-btn { background: none; border: none; font-size: 18px; cursor: pointer; color: #888; }
+        .admin-section { margin-bottom: 16px; }
+        .admin-section h5 { font-size: 13px; color: #555; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+        .code-change-box { display: flex; gap: 8px; }
+        .code-change-box input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; outline: none; }
+        .code-change-box button { padding: 8px 12px; background-color: #4A90E2; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .user-list { list-style: none; max-height: 200px; overflow-y: auto; border: 1px solid #eee; border-radius: 6px; padding: 4px; }
+        .user-item { display: flex; flex-direction: column; gap: 6px; padding: 8px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+        .user-info-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+        .sig-preview { max-width: 140px; height: 45px; border: 1px solid #ddd; border-radius: 4px; background: #fff; }
+        .btn-small { padding: 3px 8px; font-size: 11px; border-radius: 4px; border: none; cursor: pointer; align-self: flex-end; }
+        .btn-ban { background-color: #ff4d4f; color: white; }
+        .btn-unban { background-color: #52c41a; color: white; }
+        .btn-clear-all { width: 100%; background-color: #ff4d4f; color: white; padding: 8px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    </style>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<!-- 보안 캡처 시 화면 차단 오버레이 -->
+<div id="anti-capture-overlay">보안 정책으로 화면이 보호되고 있습니다.</div>
+
+<div class="container" id="app-container">
+    <!-- 우측 상단 항상 노출되는 최고관리자 권한 접근 버튼 -->
+    <div class="top-admin-bar">
+        <button class="admin-access-btn" onclick="openAdminAuthModal()">최고관리자 권한 접근</button>
+    </div>
+
+    <!-- 1. 첫 화면 (로그인 / 회원가입 선택) -->
+    <div id="home-screen" class="screen">
+        <h2>실시간 비밀 채팅방</h2>
+        <button class="btn" onclick="showScreen('login-screen')">로그인</button>
+        <button class="btn btn-secondary" onclick="showScreen('signup-screen')">회원가입</button>
+    </div>
+
+    <!-- 2. 회원가입 화면 -->
+    <div id="signup-screen" class="screen" style="display: none;">
+        <h2>회원가입</h2>
+        <div class="input-group">
+            <label for="signup-name">1. 사용할 이름</label>
+            <input type="text" id="signup-name" placeholder="이름을 입력하세요">
+        </div>
+        <div class="input-group">
+            <label for="signup-pass">2. 비밀번호</label>
+            <input type="password" id="signup-pass" placeholder="비밀번호를 입력하세요">
+        </div>
+        <div class="input-group">
+            <div class="sig-header">
+                <label>3. 정자서명 하세요</label>
+                <div class="sig-tools">
+                    <button type="button" class="sig-tool-btn" onclick="toggleSignatureFullscreen()">⛶ 전체화면 확대</button>
+                    <button type="button" class="sig-tool-btn" onclick="clearSignature()">다시 쓰기</button>
+                </div>
+            </div>
+            <div class="signature-box-container">
+                <div class="signature-box" id="sig-box-wrapper">
+                    <canvas id="sig-canvas"></canvas>
+                    <div class="fullscreen-controls">
+                        <button type="button" class="btn" style="width: auto; padding: 8px 16px;" onclick="toggleSignatureFullscreen()">완료 및 축소</button>
+                        <button type="button" class="btn btn-secondary" style="width: auto; padding: 8px 16px; margin-top:0;" onclick="clearSignature()">다시 쓰기</button>
+                    </div>
+                </div>
+            </div>
+            <span class="notice-text">* 입력한 정보를 잘 기억해 두십시오.</span>
+        </div>
+        <button class="btn" onclick="handleSignup()">회원가입하기</button>
+        <button class="btn btn-secondary" onclick="showScreen('home-screen')">이전으로</button>
+        <div id="signup-error" class="error-msg"></div>
+    </div>
+
+    <!-- 3. 회원가입 완료 화면 -->
+    <div id="signup-success-screen" class="screen" style="display: none;">
+        <h2>회원가입이 성공적으로 완료되었습니다.</h2>
+        <p style="font-size: 14px; color: #666; margin-bottom: 20px;">생성된 계정으로 로그인해 주세요.</p>
+        <button class="btn" onclick="showScreen('login-screen')">로그인 하러 가기</button>
+    </div>
+
+    <!-- 4. 로그인 화면 -->
+    <div id="login-screen" class="screen" style="display: none;">
+        <h2>로그인</h2>
+        <div class="input-group">
+            <label for="login-name">이름</label>
+            <input type="text" id="login-name" placeholder="이름을 입력하세요" onkeypress="handleEnterKey(event, handleLogin)">
+        </div>
+        <div class="input-group">
+            <label for="login-pass">비밀번호</label>
+            <input type="password" id="login-pass" placeholder="비밀번호를 입력하세요" onkeypress="handleEnterKey(event, handleLogin)">
+        </div>
+        <button class="btn" onclick="handleLogin()">로그인</button>
+        <button class="btn btn-secondary" onclick="showScreen('home-screen')">이전으로</button>
+        <div id="login-error" class="error-msg">이름 또는 비밀번호가 일치하지 않습니다.</div>
+    </div>
+
+    <!-- 5. 채팅방 코드 입력 화면 -->
+    <div id="code-screen" class="screen" style="display: none;">
+        <h2>채팅방 입장</h2>
+        <p style="font-size: 13px; color: #555; margin-bottom: 12px;" id="welcome-user-text"></p>
+        <div class="input-group">
+            <label for="room-code">채팅방 코드를 입력하세요</label>
+            <input type="password" id="room-code" placeholder="코드를 입력하세요" onkeypress="handleEnterKey(event, enterRoom)">
+        </div>
+        <button class="btn" onclick="enterRoom()">입장하기</button>
+        <div id="code-error" class="error-msg">채팅방 코드가 올바르지 않습니다.</div>
+    </div>
+
+    <!-- 6. 채팅 화면 -->
+    <div id="chat-screen" class="screen">
+        <div class="chat-header">
+            <div class="header-left">
+                <h3>비밀 채팅방</h3>
+                <span id="user-display" class="user-tag">님</span>
+            </div>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-area">
+            <label for="file-input" class="file-label" title="사진 전송">📷</label>
+            <input type="file" id="file-input" accept="image/*" onchange="sendImage(event)">
+            <input type="text" id="message-input" placeholder="메시지를 입력하세요..." onkeypress="handleEnterKey(event, sendMessage)">
+            <button id="send-btn" onclick="sendMessage()">전송</button>
+        </div>
+    </div>
+
+    <!-- 모달: 최고관리자 인증 -->
+    <div id="admin-auth-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4>최고관리자 인증</h4>
+                <button class="close-btn" onclick="closeModal('admin-auth-modal')">&times;</button>
+            </div>
+            <div class="input-group">
+                <label for="admin-pass">관리자 비밀번호</label>
+                <input type="password" id="admin-pass" placeholder="비밀번호를 입력하세요" onkeypress="handleEnterKey(event, authenticateAdmin)">
+            </div>
+            <button class="btn" onclick="authenticateAdmin()">확인</button>
+            <div id="admin-auth-error" class="error-msg">비밀번호가 올바르지 않습니다.</div>
+        </div>
+    </div>
+
+    <!-- 모달: 최고관리자 패널 -->
+    <div id="admin-dashboard-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4>⚙️ 최고관리자 패널</h4>
+                <button class="close-btn" onclick="closeModal('admin-dashboard-modal')">&times;</button>
+            </div>
+            <div class="admin-section">
+                <h5>채팅방 코드 변경</h5>
+                <div class="code-change-box">
+                    <input type="text" id="new-room-code" placeholder="새 입장 코드">
+                    <button onclick="changeRoomCode()">변경</button>
+                </div>
+            </div>
+            <div class="admin-section">
+                <h5>가입 회원 목록 (정자서명 & 추방 관리)</h5>
+                <ul class="user-list" id="admin-user-list"></ul>
+            </div>
+            <div class="admin-section">
+                <h5>대화 관리</h5>
+                <button class="btn-clear-all" onclick="clearAllMessages()">전체 대화내역 즉시 삭제</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let loggedInUser = null;
+    let userIP = "127.0.0.1";
+    let isAdmin = false;
+
+    // 동기식 간이 해시 함수 (비밀번호 원본 평문 저장 방지)
+    function fastHash(str) {
+        let hash = 0;
+        let strClean = str.toString().trim();
+        for (let i = 0; i < strClean.length; i++) {
+            const char = strClean.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash |= 0;
+        }
+        return hash.toString(16);
+    }
+
+    let currentRoomCodeFastHash = fastHash("1278");
+    const adminPassFastHash = fastHash("c1212");
+
+    // Firebase 연동 설정
+    const firebaseConfig = {
+        apiKey: "AIzaSyBSyuDOsF6IopZ9LAEhQLYBlfZS2X6buu4",
+        authDomain: "yunsopchat.firebaseapp.com",
+        projectId: "yunsopchat",
+        storageBucket: "yunsopchat.firebasestorage.app",
+        messagingSenderId: "1073549495321",
+        appId: "1:1073549495321:web:f971b60530bff9fc3eae88",
+        measurementId: "G-J8KHGG2386"
+    };
+
+    let db = null;
+    let isFirebaseReady = false;
+
+    try {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        isFirebaseReady = true;
+    } catch(e) {
+        console.warn("Firebase 서버 연결 오류:", e);
+    }
+
+    // IP 주소 확인 (동일 IP 1개 계정 제한용)
+    fetch('https://api.ipify.org?format=json')
+        .then(res => res.json())
+        .then(data => { userIP = data.ip; })
+        .catch(err => { userIP = "IP_UNKNOWN"; });
+
+    /* 보안 캡처 방지 기능 (PC 및 모바일) */
+    const overlay = document.getElementById('anti-capture-overlay');
+    function triggerBlackout() {
+        overlay.style.display = 'flex';
+        setTimeout(() => {
+            overlay.style.display = 'none';
+        }, 1200);
+    }
+
+    // 1. 키보드 단축키 단속 (PrtScn, Alt+PrtScn, Win+Shift+S 등)
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'PrintScreen' || e.keyCode === 44) {
+            triggerBlackout();
+            if (navigator.clipboard) { navigator.clipboard.writeText(''); }
+        }
+    });
+
+    window.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'p' || e.key === 'P' || e.key === 's' || e.key === 'S')) {
+            triggerBlackout();
+        }
+        if (e.key === 'PrintScreen' || e.keyCode === 44) {
+            triggerBlackout();
+        }
+    });
+
+    // 2. 모바일 및 PC 윈도우 포커스 이탈/캡처 시점 블라인드
+    window.addEventListener('blur', () => {
+        triggerBlackout();
+    });
+
+    // 화면 전환 제어
+    function showScreen(screenId) {
+        const screens = ['home-screen', 'signup-screen', 'signup-success-screen', 'login-screen', 'code-screen', 'chat-screen'];
+        screens.forEach(s => {
+            const el = document.getElementById(s);
+            if(el) el.style.display = (s === screenId) ? (s === 'chat-screen' ? 'flex' : 'flex') : 'none';
+        });
+        if (screenId === 'signup-screen') {
+            setTimeout(initCanvas, 50);
+        }
+    }
+
+    // Canvas 정자서명 및 터치/바디 스크롤 제어
+    let canvas, ctx, isDrawing = false;
+    let strokes = []; // 서명 데이터 보존용
+
+    function initCanvas() {
+        canvas = document.getElementById('sig-canvas');
+        ctx = canvas.getContext('2d');
+        resizeCanvas();
+
+        const getPos = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        };
+
+        const startDraw = (e) => {
+            isDrawing = true;
+            const pos = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            // 터치 서명 시 화면 전체가 굴러가거나 밀리는 현상 차단
+            if (e.touches) e.preventDefault();
+        };
+
+        const draw = (e) => {
+            if (!isDrawing) return;
+            const pos = getPos(e);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            if (e.touches) e.preventDefault();
+        };
+
+        const stopDraw = () => { isDrawing = false; };
+
+        canvas.onmousedown = startDraw;
+        canvas.onmousemove = draw;
+        canvas.onmouseup = stopDraw;
+        canvas.ontouchstart = startDraw;
+        canvas.ontouchmove = draw;
+        canvas.ontouchend = stopDraw;
+    }
+
+    function resizeCanvas() {
+        if (!canvas) return;
+        const box = document.getElementById('sig-box-wrapper');
+        const imgData = canvas.toDataURL(); // 기존 드로잉 백업
+        
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+
+        // 해상도 조율 후 기존 그림 원복
+        if (imgData && !isCanvasBlank(canvas)) {
+            const tempImg = new Image();
+            tempImg.onload = () => { ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height); };
+            tempImg.src = imgData;
+        }
+    }
+
+    function toggleSignatureFullscreen() {
+        const wrapper = document.getElementById('sig-box-wrapper');
+        wrapper.classList.toggle('fullscreen');
+        setTimeout(resizeCanvas, 100);
+    }
+
+    function clearSignature() {
+        if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function isCanvasBlank(c) {
+        if (!c || !ctx) return true;
+        const pixelBuffer = new Uint32Array(ctx.getImageData(0, 0, c.width, c.height).data.buffer);
+        return !pixelBuffer.some(color => color !== 0);
+    }
+
+    // 1. 회원가입 처리
+    async function handleSignup() {
+        const name = document.getElementById('signup-name').value.trim();
+        const pass = document.getElementById('signup-pass').value.trim();
+        const errEl = document.getElementById('signup-error');
+
+        if (!name || !pass) {
+            errEl.innerText = "이름과 비밀번호를 모두 입력해주세요.";
+            errEl.style.display = "block";
+            return;
+        }
+
+        if (isCanvasBlank(canvas)) {
+            errEl.innerText = "정자서명을 입력해 주세요.";
+            errEl.style.display = "block";
+            return;
+        }
+
+        const sigDataUrl = canvas.toDataURL();
+        const passHashVal = fastHash(pass);
+
+        if (isFirebaseReady) {
+            try {
+                // 동일 IP 가입 확인
+                const ipCheck = await db.collection("users").where("ip", "==", userIP).get();
+                if (!ipCheck.empty) {
+                    errEl.innerText = "이미 해당 IP 주소에서 생성된 계정이 존재합니다. (1개 IP당 1개 계정 제한)";
+                    errEl.style.display = "block";
+                    return;
+                }
+
+                // 동일 이름 중복 확인
+                const nameCheck = await db.collection("users").doc(name).get();
+                if (nameCheck.exists) {
+                    errEl.innerText = "이미 존재하는 이름입니다. 다른 이름을 사용해주세요.";
+                    errEl.style.display = "block";
+                    return;
+                }
+
+                // 회원 정보 저장 (비밀번호 제외한 정보 & 해시값)
+                await db.collection("users").doc(name).set({
+                    name: name,
+                    passHash: passHashVal,
+                    signature: sigDataUrl,
+                    ip: userIP,
+                    isBanned: false,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                errEl.style.display = "none";
+                showScreen('signup-success-screen');
+            } catch (e) {
+                errEl.innerText = "회원가입 처리 중 오류 발생: " + e.message;
+                errEl.style.display = "block";
+            }
+        }
+    }
+
+    // 2. 로그인 처리
+    async function handleLogin() {
+        const name = document.getElementById('login-name').value.trim();
+        const pass = document.getElementById('login-pass').value.trim();
+        const errEl = document.getElementById('login-error');
+
+        if (!name || !pass) {
+            errEl.innerText = "이름과 비밀번호를 입력해주세요.";
+            errEl.style.display = "block";
+            return;
+        }
+
+        if (isFirebaseReady) {
+            try {
+                const userDoc = await db.collection("users").doc(name).get();
+                if (!userDoc.exists) {
+                    errEl.innerText = "가입되지 않은 이름이거나 정보가 일치하지 않습니다.";
+                    errEl.style.display = "block";
+                    return;
+                }
+
+                const userData = userDoc.data();
+                if (userData.isBanned) {
+                    errEl.innerText = "관리자에 의해 추방된 계정입니다. 접속할 수 없습니다.";
+                    errEl.style.display = "block";
+                    return;
+                }
+
+                if (userData.passHash === fastHash(pass)) {
+                    loggedInUser = userData;
+                    document.getElementById('welcome-user-text').innerText = `'${userData.name}' 님 환영합니다.`;
+                    errEl.style.display = "none";
+                    showScreen('code-screen');
+                } else {
+                    errEl.innerText = "비밀번호가 일치하지 않습니다.";
+                    errEl.style.display = "block";
+                }
+            } catch (e) {
+                errEl.innerText = "로그인 처리 오류: " + e.message;
+                errEl.style.display = "block";
+            }
+        }
+    }
+
+    // 3. 채팅방 코드 검증 및 입장
+    function enterRoom() {
+        const codeInput = document.getElementById("room-code").value.trim();
+        const errorMsg = document.getElementById("code-error");
+
+        if (fastHash(codeInput) === currentRoomCodeFastHash) {
+            document.getElementById("user-display").innerText = loggedInUser.name + " 님";
+            errorMsg.style.display = "none";
+            showScreen('chat-screen');
+            
+            addSystemMessage(`${loggedInUser.name}님이 입장하셨습니다.`);
+            initRealtimeListener();
+        } else {
+            errorMsg.style.display = "block";
+        }
+    }
+
+    // 4. 실시간 메세지 동기화
+    function initRealtimeListener() {
+        db.collection("messages").orderBy("timestamp", "asc")
+            .onSnapshot(snapshot => {
+                const chatContainer = document.getElementById("chat-messages");
+                chatContainer.innerHTML = "";
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.type === 'system') {
+                        renderSystemMessage(data.text);
+                    } else if (data.type === 'image') {
+                        renderImageMessage(data.sender, data.content, data.sender === loggedInUser.name, doc.id);
+                    } else {
+                        renderTextMessage(data.sender, data.content, data.sender === loggedInUser.name, doc.id);
+                    }
+                });
+            });
+    }
+
+    // 5. 최고관리자 인증 및 패널
+    function openAdminAuthModal() {
+        document.getElementById("admin-pass").value = "";
+        document.getElementById("admin-auth-error").style.display = "none";
+        document.getElementById("admin-auth-modal").style.display = "flex";
+    }
+
+    function authenticateAdmin() {
+        const pass = document.getElementById("admin-pass").value.trim();
+
+        if (fastHash(pass) === adminPassFastHash) {
+            isAdmin = true;
+            document.getElementById("app-container").classList.add("admin-mode");
+            closeModal("admin-auth-modal");
+            openAdminDashboard();
+        } else {
+            document.getElementById("admin-auth-error").style.display = "block";
+        }
+    }
+
+    function openAdminDashboard() {
+        document.getElementById("new-room-code").value = "";
+        renderAdminUserList();
+        document.getElementById("admin-dashboard-modal").style.display = "flex";
+    }
+
+    async function renderAdminUserList() {
+        const userListEl = document.getElementById("admin-user-list");
+        userListEl.innerHTML = "";
+
+        if (isFirebaseReady) {
+            const snapshot = await db.collection("users").get();
+            if (snapshot.empty) {
+                userListEl.innerHTML = '<li style="padding:10px;color:#888;text-align:center;">가입된 회원이 없습니다.</li>';
+                return;
+            }
+
+            snapshot.forEach(doc => {
+                const u = doc.data();
+                const li = document.createElement("li");
+                li.className = "user-item";
+                li.innerHTML = `
+                    <div class="user-info-head">
+                        <span>이름: ${u.name} ${u.isBanned ? '<span style="color:red;">(추방됨)</span>' : ''}</span>
+                        <span>IP: ${u.ip}</span>
+                    </div>
+                    <div>
+                        <span style="font-size:11px;color:#777;">정자서명:</span><br>
+                        <img src="${u.signature}" class="sig-preview" alt="서명">
+                    </div>
+                    ${u.isBanned ? 
+                        `<button class="btn-small btn-unban" onclick="unbanUser('${u.name}')">추방 해제</button>` : 
+                        `<button class="btn-small btn-ban" onclick="banUser('${u.name}')">회원 추방</button>`
+                    }
+                `;
+                userListEl.appendChild(li);
+            });
+        }
+    }
+
+    async function banUser(name) {
+        if (confirm(`'${name}' 회원을 추방하시겠습니까?`)) {
+            await db.collection("users").doc(name).update({ isBanned: true });
+            addSystemMessage(`[관리자 제재] '${name}' 회원이 추방되었습니다.`);
+            renderAdminUserList();
+        }
+    }
+
+    async function unbanUser(name) {
+        if (confirm(`'${name}' 회원의 추방을 해제하시겠습니까?`)) {
+            await db.collection("users").doc(name).update({ isBanned: false });
+            addSystemMessage(`[관리자 안내] '${name}' 회원의 추방 조치가 해제되었습니다.`);
+            renderAdminUserList();
+        }
+    }
+
+    function changeRoomCode() {
+        const newCode = document.getElementById("new-room-code").value.trim();
+        if (!newCode) {
+            alert("변경할 코드를 입력해 주세요.");
+            return;
+        }
+        currentRoomCodeFastHash = fastHash(newCode);
+        addSystemMessage(`[관리자 안내] 채팅방 코드가 변경되었습니다.`);
+        alert("채팅방 코드가 변경되었습니다.");
+    }
+
+    function clearAllMessages() {
+        if (confirm("모든 대화 및 이미지 내역을 삭제하시겠습니까?")) {
+            if (isFirebaseReady) {
+                db.collection("messages").get().then(snapshot => {
+                    snapshot.forEach(doc => doc.ref.delete());
+                });
+            }
+            addSystemMessage("[관리자 안내] 전체 대화내역이 초기화되었습니다.");
+            closeModal("admin-dashboard-modal");
+        }
+    }
+
+    function deleteSingleMessage(msgEl, docId) {
+        if (confirm("이 메시지를 삭제하시겠습니까?")) {
+            if (isFirebaseReady && docId) {
+                db.collection("messages").doc(docId).delete();
+            } else {
+                msgEl.remove();
+            }
+        }
+    }
+
+    function closeModal(modalId) {
+        document.getElementById(modalId).style.display = "none";
+    }
+
+    function addSystemMessage(text) {
+        if (isFirebaseReady) {
+            db.collection("messages").add({
+                type: "system",
+                text: text,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+    }
+
+    function renderSystemMessage(text) {
+        const chatContainer = document.getElementById("chat-messages");
+        const sysDiv = document.createElement("div");
+        sysDiv.style.cssText = "text-align:center;font-size:12px;color:#999;margin:8px 0;";
+        sysDiv.innerText = text;
+        chatContainer.appendChild(sysDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function sendMessage() {
+        const input = document.getElementById("message-input");
+        const text = input.value.trim();
+        if (!text) return;
+
+        if (isFirebaseReady) {
+            db.collection("messages").add({
+                type: "text",
+                sender: loggedInUser.name,
+                content: text,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        input.value = "";
+    }
+
+    function sendImage(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if (isFirebaseReady) {
+                db.collection("messages").add({
+                    type: "image",
+                    sender: loggedInUser.name,
+                    content: e.target.result,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            }
+        };
+        reader.readAsDataURL(file);
+        event.target.value = "";
+    }
+
+    function renderTextMessage(sender, text, isSent, docId) {
+        const chatContainer = document.getElementById("chat-messages");
+        const msgDiv = document.createElement("div");
+        msgDiv.className = `message-item ${isSent ? 'sent' : 'received'}`;
+
+        const nameDiv = document.createElement("div");
+        nameDiv.className = "sender-name";
+        nameDiv.innerText = sender;
+
+        const bubbleDiv = document.createElement("div");
+        bubbleDiv.className = "message-bubble";
+        bubbleDiv.innerText = text;
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "delete-msg-btn";
+        deleteBtn.innerText = "삭제";
+        deleteBtn.onclick = function() { deleteSingleMessage(msgDiv, docId); };
+
+        msgDiv.appendChild(nameDiv);
+        msgDiv.appendChild(bubbleDiv);
+        msgDiv.appendChild(deleteBtn);
+        chatContainer.appendChild(msgDiv);
+
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function renderImageMessage(sender, imageSrc, isSent, docId) {
+        const chatContainer = document.getElementById("chat-messages");
+        const msgDiv = document.createElement("div");
+        msgDiv.className = `message-item ${isSent ? 'sent' : 'received'}`;
+
+        const nameDiv = document.createElement("div");
+        nameDiv.className = "sender-name";
+        nameDiv.innerText = sender;
+
+        const img = document.createElement("img");
+        img.src = imageSrc;
+        img.className = "chat-image";
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "delete-msg-btn";
+        deleteBtn.innerText = "삭제";
+        deleteBtn.onclick = function() { deleteSingleMessage(msgDiv, docId); };
+
+        msgDiv.appendChild(nameDiv);
+        msgDiv.appendChild(img);
+        msgDiv.appendChild(deleteBtn);
+        chatContainer.appendChild(msgDiv);
+
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function handleEnterKey(event, actionFunction) {
+        if (event.key === 'Enter') {
+            actionFunction();
+        }
+    }
+</script>
+
+</body>
+</html>
